@@ -29,7 +29,7 @@ sub process{
                         my $packets= Net::DHCP::Packet->new($udpack->{data});
                         my $mail= Net::SMTP->new(Host => 'localhost',Port => 2525);
                         $mail->mail('reuben@perl.com');
-                        $mail->to('rmontehermoso@infoweapons.com');
+                        $mail->to('reuben@infoweapons.com');
                         $mail->data();
                         $mail->datasend("From:DHCP BOT \<IT\@infoweapons.com\>\n");
                         $mail->datasend("To:DevTeam \<devteam\@infoweapons.com\> \n");
