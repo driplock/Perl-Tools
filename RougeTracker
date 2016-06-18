@@ -1,0 +1,81 @@
+#!/usr/bin/perl -w
+
+use strict;
+use Net::DHCP::Packet;
+use Net::PcapUtils;
+use NetPacket::Ethernet;
+use NetPacket::IP;
+use NetPacket::UDP;
+use Net::SMTP;
+#use Net::Packet::Dhcpclient;
+
+while(1){
+&loop;
+}
+sub loop{
+Net::PcapUtils::loop(\&process, FILTER =>'udp dst port 68', DEV => 'eth0', SNAPLEN =>'400');
+}
+sub process{
+	my ($arg,$hdr,$packet)=@_;
+	my $eth=NetPacket::Ethernet->decode($packet);
+	my $ipack=NetPacket::IP->decode($eth->{data});
+	my $udpack= NetPacket::UDP->decode($ipack->{data});
+	my $ethtype=sprintf("%0.4x", $eth->{type});
+	my $ethtayp=sprintf("%0.4x", 2048);
+	my $datetoday=GetDate();
+        if ($ethtype == $ethtayp || $udpack->{len} == 308 || $udpack->{len} == 321 ){
+                print $ipack->{src_ip} . "=====>" . $ipack->{dest_ip} . "(id : $ipack->{id}, ttl: $ipack->{ttl})" . "\n";
+                if ($ipack->{src_ip}  ne "10.1.0.5" || $ipack->{src_ip} ne "10.1.0.11"){ 
+                        my $packets= Net::DHCP::Packet->new($udpack->{data});
+                        my $mail= Net::SMTP->new(Host => 'localhost',Port => 2525);
+                        $mail->mail('reuben@perl.com');
+                        $mail->to('rmontehermoso@infoweapons.com');
+                        $mail->data();
+                        $mail->datasend("From:DHCP BOT \<IT\@infoweapons.com\>\n");
+                        $mail->datasend("To:DevTeam \<devteam\@infoweapons.com\> \n");
+                        $mail->datasend("Reply-To: it\@infoweapons.com\n");
+                        $mail->datasend("Subject: Rogue DHCP server\n");  
+                        $mail->datasend("\n\n");
+                        $mail->datasend("\nGreetings Earthling,\n\n");
+                        $mail->datasend("\tROGUE DHCP Server DETECTED on\n\n");
+                        $mail->datasend("\t".$datetoday."\n\n");
+                        $mail->datasend("\tPlease DISABLE ASAP!\n\n");
+                        $mail->datasend("Packet Capture:\n\n");
+                        $mail->datasend("++++++++++++++++++++++++++++++++++++++\n");
+                        $mail->datasend($packets->toString());
+                        $mail->datasend("\n+++++++++++++++++++++++++++++++++++++\n");
+                        $mail->datasend("\n\n");
+                        $mail->datasend("Cheers, \n DHCP BOT");
+                        $mail->dataend();
+                        $mail->quit();
+                        print "Rouge DHCP found..Mail Sent\n";
+                }                
+        
+        }
+        else{
+                print $ipack->{src_ip} . "=====>" . $ipack->{dest_ip} . "(id : $ipack->{id}, ttl: $ipack->{ttl})" . "\n";
+                print $ethtype ."=". $udpack->{len} . "Packet not good for processing \n";
+                
+        }
+
+}
+
+
+
+sub GetDate{
+ my %num2mon =qw( 1 Jan 2 Feb 3 Mar 4 Apr 5 May 6 Jun 7 Jul 8 Aug 9 Sep
+              10 Oct 11 Nov 12 Dec );
+
+ my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) =localtime(time);
+
+ my $month=sprintf("%0.1d",$mon+1);
+ my $time=sprintf("%0.2d",$hour);
+ $time.=":". sprintf("%0.2d",$min);
+ $time.=":". sprintf("%0.2d",$sec);
+ my $date=$num2mon{$month};
+ $date.=" ".sprintf ("%0.2d", $mday);
+ $date.=" ".$time." PHT ";
+ $date.=" ".($year+1900);
+ return $date;
+}
+

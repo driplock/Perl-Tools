@@ -1,0 +1,125 @@
+#!/usr/bin/perl -w
+################################################################
+###################DHCP CLIENT REQUEST SCRIPT###################
+################################################################
+
+use strict;
+
+use Net::DHCP::Packet;
+use Net::DHCP::Constants;
+use Net::RawIP;
+use Net::PcapUtils;
+use IO::Socket::INET;
+use IO::Socket;
+use NetPacket::Ethernet;
+use NetPacket::ARP;
+use NetPacket::IP;
+use NetPacket::UDP;
+
+##### MAC address generator #############
+
+sub genmac
+{
+my $test_mac="004d";
+my $a=0;
+while($a++<4)
+	{
+	$test_mac.=sprintf("%x",int rand 16);
+	$test_mac.=sprintf("%x",int rand 16);
+	}
+return ($test_mac);
+}
+
+
+##### REQUEST IP GENERATOR ###############
+
+sub genip
+{
+my $ip_req="172.17";
+$ip_req="172.17";
+$ip_req.= "." . int rand  255;
+$ip_req.= "." . int rand  255;
+return $ip_req;
+}
+
+#########DHCP request packet ###########
+
+my $p= Net::DHCP::Packet->new( op => '1',
+			       hlen => '6',
+			       htype => '1',
+			       hops => '0');
+my $id=int(rand(0xFFFFFFFF));
+my $mac=genmac();
+my $ip=genip();
+$p->chaddr($mac);
+$p->xid($id);
+$p->isDhcp();
+$p->addOptionValue(DHO_DHCP_MESSAGE_TYPE(), 3);
+$p->addOptionValue(DHO_DHCP_SERVER_IDENTIFIER(), "172.17.0.34");
+$p->addOptionValue(DHO_DHCP_REQUESTED_ADDRESS(), $ip);
+$p->addOptionValue(DHO_DHCP_LEASE_TIME(), 1*1*1);
+#$p->addOptionValue(DHO_HOST_NAME(), "driplock");
+#$p->addOptionValue(DHO_DHCP_PARAMETER_REQUEST_LIST(), "1 3 15 6 ");
+my $packet= $p->serialize();
+print $p->toString();
+
+###################DHCP request header ############
+
+my $n = Net::RawIP->new({ ip => {
+				saddr => '0.0.0.0',
+				daddr => '255.255.255.255',
+				},
+			udp => {
+				source => 68,
+				dest => 67,
+				data => $packet
+				}
+			});
+
+
+my @macar= split //, $mac;
+my $i;
+my $macjoin;
+my $counter=0;
+	foreach $i (@macar)
+		{
+		$macjoin.=$i;
+		$counter++;
+			if($counter%2==0)
+			{
+			$macjoin.=":";
+			}
+}
+chop ($macjoin);
+print "Mac Address Generated= ". $macjoin. "\n";
+print "\n";
+$n->ethnew("bge0");
+$n->ethset( source => $macjoin , dest => 'ff:ff:ff:ff:ff:ff');
+$n->ethsend;
+
+my $packetcap1= Net::PcapUtils::open( FILTER =>'udp' , DEV => 'bge0', SNAPLEN => 400);
+my ($packetcap, %hdr)=Net::PcapUtils::next($packetcap1);
+my $ethpack=NetPacket::Ethernet->decode($packetcap);
+my $ipack=NetPacket::IP->decode($ethpack->{data});
+my $udpack=NetPacket::UDP->decode($ipack->{data});
+my $capture=Net::DHCP::Packet->new($udpack->{data});
+my $smac=sprintf ($ethpack->{src_mac});
+my $dmac=sprintf ($ethpack->{dest_mac});
+my $srcmac= sprintf("%s%s:%s%s:%s%s:%s%s:%s%s:%s%s", split//, $smac);
+my $destmac= sprintf("%s%s:%s%s:%s%s:%s%s:%s%s:%s%s", split//, $dmac);
+
+print ("====================BOOT REPLY========================\n");
+print "\n";
+print $ipack->{src_ip} . "=====>" . $ipack->{dest_ip} . "(id : $ipack->{id}, ttl: $ipack->{ttl})" . "\n";
+print "UDP Source: $udpack->{src_port}  ==> UDP Destination: $udpack->{dest_port} \n";
+print "UDP Length: $udpack->{len}, UDP Data Length:", length($udpack->{data})," \n";
+print "UDP Checksum: $udpack->{cksum} \n";
+
+print "Source Mac address is : ".$srcmac."=====>";
+print "Destination Mac address is: " . $destmac."\n";
+my $ethtype=sprintf("%0.4x", $ethpack->{type});
+print "Ethertype: ". $ethtype . "\n";
+print "\n";
+
+print ("====================BOOT PACKET========================\n");
+print $capture->toString()."\n";
